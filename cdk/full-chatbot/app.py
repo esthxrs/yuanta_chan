@@ -51,6 +51,7 @@ class ChatbotInfrastructureStack(Stack):
             "src/lambda_functions/investment_metrics",
             "src/lambda_functions/financial_data", 
             "src/lambda_functions/ticket_creation",
+            "src/lambda_functions/trade_history",
             "src/bedrock_agent"
         ]
         
@@ -77,11 +78,10 @@ class ChatbotInfrastructureStack(Stack):
         # Configuration from environment
         logger.info("Loading environment configuration...")
         self.account_id = os.getenv('AWS_ACCOUNT_ID')
-        self.region = self.region
+        self._region = os.getenv('AWS_DEFAULT_REGION') or 'us-east-1'
         
         logger.info(f"   AWS Account ID: {self.account_id}")
-        logger.info(f"   AWS Region: {self.region}")
-        
+        logger.info(f"   AWS Region: {self._region}")
         # Create IAM roles first
         logger.info("Creating IAM roles...")
         self.lambda_execution_role = self._create_lambda_execution_role()
@@ -93,6 +93,7 @@ class ChatbotInfrastructureStack(Stack):
         self.investment_metrics_lambda = self._create_investment_metrics_lambda()
         self.financial_data_lambda = self._create_financial_data_lambda()
         self.ticket_creation_lambda = self._create_ticket_creation_lambda()
+        self.trade_history_lambda = self._create_trade_history_lambda()
         self.bedrock_adapter_lambda = self._create_bedrock_adapter_lambda()
         logger.info("Lambda functions created successfully!")
         
@@ -113,7 +114,7 @@ class ChatbotInfrastructureStack(Stack):
         logger.info("   Creating Lambda execution role...")
         role = iam.Role(
             self, "LambdaExecutionRole",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),  # type: ignore
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSLambdaBasicExecutionRole"),
                 iam.ManagedPolicy.from_aws_managed_policy_name("AmazonBedrockFullAccess"),
@@ -146,7 +147,7 @@ class ChatbotInfrastructureStack(Stack):
         logger.info("   Creating Bedrock agent role...")
         role = iam.Role(
             self, "BedrockAgentRole",
-            assumed_by=iam.ServicePrincipal("bedrock.amazonaws.com"),
+            assumed_by=iam.ServicePrincipal("bedrock.amazonaws.com"),  # type: ignore
             inline_policies={
                 "BedrockAgentPolicy": iam.PolicyDocument(
                     statements=[
@@ -157,8 +158,8 @@ class ChatbotInfrastructureStack(Stack):
                                 "lambda:InvokeFunction"
                             ],
                             resources=[
-                                f"arn:aws:bedrock:{self.region}::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
-                                f"arn:aws:lambda:{self.region}:{self.account_id}:function:*"
+                                f"arn:aws:bedrock:{self._region}::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0",
+                                "*"
                             ]
                         )
                     ]
@@ -179,17 +180,8 @@ class ChatbotInfrastructureStack(Stack):
             self, "InvestmentMetricsFunction",
             runtime=_lambda.Runtime.PYTHON_3_12,
             handler="lambda_function.lambda_handler",
-            code=_lambda.Code.from_asset(
-                asset_path,
-                bundling=cdk.BundlingOptions(
-                    image=_lambda.Runtime.PYTHON_3_12.bundling_image,
-                    command=[
-                        "bash", "-c",
-                        "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output"
-                    ]
-                )
-            ),
-            role=self.lambda_execution_role,
+            code=_lambda.Code.from_asset(asset_path),
+            role=self.lambda_execution_role,  # type: ignore
             timeout=Duration.seconds(30),
             memory_size=512,
             environment={
@@ -212,17 +204,8 @@ class ChatbotInfrastructureStack(Stack):
             self, "FinancialDataFunction", 
             runtime=_lambda.Runtime.PYTHON_3_12,
             handler="lambda_function.lambda_handler",
-            code=_lambda.Code.from_asset(
-                asset_path,
-                bundling=cdk.BundlingOptions(
-                    image=_lambda.Runtime.PYTHON_3_12.bundling_image,
-                    command=[
-                        "bash", "-c",
-                        "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output"
-                    ]
-                )
-            ),
-            role=self.lambda_execution_role,
+            code=_lambda.Code.from_asset(asset_path),
+            role=self.lambda_execution_role,  # type: ignore
             timeout=Duration.seconds(30),
             memory_size=512,
             environment={
@@ -245,17 +228,8 @@ class ChatbotInfrastructureStack(Stack):
             self, "TicketCreationFunction",
             runtime=_lambda.Runtime.PYTHON_3_12, 
             handler="lambda_function.lambda_handler",
-            code=_lambda.Code.from_asset(
-                asset_path,
-                bundling=cdk.BundlingOptions(
-                    image=_lambda.Runtime.PYTHON_3_12.bundling_image,
-                    command=[
-                        "bash", "-c",
-                        "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output"
-                    ]
-                )
-            ),
-            role=self.lambda_execution_role,
+            code=_lambda.Code.from_asset(asset_path),
+            role=self.lambda_execution_role,  # type: ignore
             timeout=Duration.seconds(30),
             memory_size=512,
             environment={
@@ -265,6 +239,30 @@ class ChatbotInfrastructureStack(Stack):
             description="Internal ticketing system integration for AI chatbot"
         )
         logger.info(f"   Ticket Creation Lambda created: {function.function_name}")
+        return function
+
+    def _create_trade_history_lambda(self) -> _lambda.Function:
+        """Create Trade History Lambda function"""
+        logger.info("   Creating Trade History Lambda...")
+        # Use invariant path resolution
+        project_root = SCRIPT_DIR.parent.parent
+        asset_path = str(project_root / "src/lambda_functions/trade_history")
+        
+        function = _lambda.Function(
+            self, "TradeHistoryFunction",
+            runtime=_lambda.Runtime.PYTHON_3_12,
+            handler="lambda_function.lambda_handler",
+            code=_lambda.Code.from_asset(asset_path),
+            role=self.lambda_execution_role,  # type: ignore
+            timeout=Duration.seconds(30),
+            memory_size=512,
+            environment={
+                "LOG_LEVEL": "INFO"
+            },
+            function_name="ChatbotTradeHistory",
+            description="Trade history retrieval service for AI chatbot"
+        )
+        logger.info(f"   Trade History Lambda created: {function.function_name}")
         return function
 
     def _create_bedrock_adapter_lambda(self) -> _lambda.Function:
@@ -278,24 +276,16 @@ class ChatbotInfrastructureStack(Stack):
             self, "BedrockAdapterFunction",
             runtime=_lambda.Runtime.PYTHON_3_12,
             handler="bedrock_adapter.lambda_handler", 
-            code=_lambda.Code.from_asset(
-                asset_path,
-                bundling=cdk.BundlingOptions(
-                    image=_lambda.Runtime.PYTHON_3_12.bundling_image,
-                    command=[
-                        "bash", "-c",
-                        "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output"
-                    ]
-                )
-            ),
-            role=self.lambda_execution_role,
+            code=_lambda.Code.from_asset(asset_path),
+            role=self.lambda_execution_role,  # type: ignore
             timeout=Duration.seconds(60),
             memory_size=1024,
             environment={
                 "LOG_LEVEL": "INFO",
                 "INVESTMENT_METRICS_FUNCTION": self.investment_metrics_lambda.function_name,
                 "FINANCIAL_DATA_FUNCTION": self.financial_data_lambda.function_name,
-                "TICKET_CREATION_FUNCTION": self.ticket_creation_lambda.function_name
+                "TICKET_CREATION_FUNCTION": self.ticket_creation_lambda.function_name,
+                "TRADE_HISTORY_FUNCTION": self.trade_history_lambda.function_name
             },
             function_name="ChatbotBedrockAdapter",
             description="Bedrock Agent adapter with real LLM integration"
@@ -310,6 +300,7 @@ class ChatbotInfrastructureStack(Stack):
             ("InvestmentMetricsLogGroup", self.investment_metrics_lambda),
             ("FinancialDataLogGroup", self.financial_data_lambda), 
             ("TicketCreationLogGroup", self.ticket_creation_lambda),
+            ("TradeHistoryLogGroup", self.trade_history_lambda),
             ("BedrockAdapterLogGroup", self.bedrock_adapter_lambda)
         ]
         
@@ -330,6 +321,7 @@ class ChatbotInfrastructureStack(Stack):
             ("InvestmentMetricsLambdaArn", self.investment_metrics_lambda.function_arn, "Investment Metrics Lambda Function ARN"),
             ("FinancialDataLambdaArn", self.financial_data_lambda.function_arn, "Financial Data Lambda Function ARN"),
             ("TicketCreationLambdaArn", self.ticket_creation_lambda.function_arn, "Ticket Creation Lambda Function ARN"),
+            ("TradeHistoryLambdaArn", self.trade_history_lambda.function_arn, "Trade History Lambda Function ARN"),
             ("BedrockAdapterLambdaArn", self.bedrock_adapter_lambda.function_arn, "Bedrock Adapter Lambda Function ARN"),
             ("BedrockAgentRoleArn", self.bedrock_agent_role.role_arn, "Bedrock Agent IAM Role ARN")
         ]
