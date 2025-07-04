@@ -26,7 +26,7 @@ class BedrockAgentAdapter:
         self.analyzer = SequentialInvestmentAnalyzer()
         
         # Set region from parameter, environment variable, or default
-        self.region = region or os.getenv('AWS_REGION', os.getenv('AWS_DEFAULT_REGION', 'us-east-1'))
+        self.region = region or os.getenv('AWS_REGION', os.getenv('AWS_DEFAULT_REGION', 'ap-southeast-1'))
         
         # Initialize AWS credentials and clients
         self.bedrock_runtime = None
@@ -169,6 +169,8 @@ class BedrockAgentAdapter:
                 return self._analyze_investment(parameters)
             elif function_name == "get_financial_data":
                 return self._get_financial_data(parameters)
+            elif function_name == "get_trade_history":
+                return self._get_trade_history(parameters)
             else:
                 return self._error_response(f"Unknown function: {function_name}")
                 
@@ -471,6 +473,77 @@ User question: """
                 }
             }
         }
+    
+    def _get_trade_history(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Get trade history by calling the trade_history lambda function"""
+        try:
+            query_type = parameters.get("query_type", "allTrades")
+            time_frame = parameters.get("time_frame", "this year")
+            user_id = parameters.get("user_id", "mock_ic_user_1")
+            
+            # Get the trade history lambda function name from environment
+            trade_history_function = os.getenv('TRADE_HISTORY_FUNCTION', 'ChatbotTradeHistory')
+            
+            # Create Lambda client
+            lambda_client = boto3.client('lambda', region_name=self.region)
+            
+            # Prepare payload for trade history lambda
+            payload = {
+                "query_type": query_type,
+                "time_frame": time_frame,
+                "user_id": user_id
+            }
+            
+            self.logger.info(f"Invoking trade history lambda: {trade_history_function}")
+            
+            # Invoke the trade history lambda function
+            response = lambda_client.invoke(
+                FunctionName=trade_history_function,
+                InvocationType='RequestResponse',
+                Payload=json.dumps(payload)
+            )
+            
+            # Parse the response
+            response_payload = json.loads(response['Payload'].read())
+            
+            if response_payload.get('statusCode') == 200:
+                body = json.loads(response_payload.get('body', '{}'))
+                
+                # Format the response for Bedrock Agent
+                trades = body.get('trades', [])
+                summary = body.get('summary', {})
+                
+                response_text = f"📊 Trade History Report ({time_frame})\n\n"
+                response_text += f"📈 Total Trades: {summary.get('total_trades', 0)}\n"
+                response_text += f"🟢 Buy Trades: {summary.get('buy_trades', 0)}\n"
+                response_text += f"🔴 Sell Trades: {summary.get('sell_trades', 0)}\n"
+                response_text += f"📋 Unique Stocks: {summary.get('unique_tickers', 0)}\n"
+                response_text += f"📦 Total Volume: {summary.get('total_volume', 0)}\n\n"
+                
+                if trades:
+                    response_text += "🕒 Recent Trades:\n"
+                    for trade in trades[:5]:  # Show last 5 trades
+                        response_text += f"• {trade.get('date')} - {trade.get('type')} {trade.get('quantity')} {trade.get('ticker')} @ ${trade.get('price')}\n"
+                
+                return {
+                    "response": {
+                        "actionGroup": "InvestmentTools",
+                        "function": "get_trade_history",
+                        "functionResponse": {
+                            "responseBody": {
+                                "TEXT": {
+                                    "body": response_text
+                                }
+                            }
+                        }
+                    }
+                }
+            else:
+                return self._error_response(f"Trade history retrieval failed: {response_payload.get('body', 'Unknown error')}")
+                
+        except Exception as e:
+            self.logger.error(f"Trade history retrieval failed: {str(e)}")
+            return self._error_response(f"Failed to retrieve trade history: {str(e)}")
     
     def _error_response(self, error_message: str) -> Dict[str, Any]:
         """Format error response for Bedrock Agent"""

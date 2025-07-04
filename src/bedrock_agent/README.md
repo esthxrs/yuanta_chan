@@ -125,7 +125,7 @@ poetry install
 poetry run python src/bedrock_agent/test_integration.py
 
 # 3. Deploy to AWS
-poetry run python src/bedrock_agent/deploy_agent.py --account-id YOUR_ACCOUNT_ID --region us-east-1
+poetry run python src/bedrock_agent/deploy_agent.py --account-id YOUR_ACCOUNT_ID --region ap-southeast-1
 
 # 4. Test deployed agent
 poetry run python src/bedrock_agent/deploy_agent.py --account-id YOUR_ACCOUNT_ID --test

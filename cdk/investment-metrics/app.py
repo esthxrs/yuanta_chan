@@ -56,15 +56,27 @@ class InvestmentMetricsStack(Stack):
         # Use invariant path resolution - works from any directory
         project_root = SCRIPT_DIR.parent.parent  # Go up from cdk/investment-metrics to project root
         asset_path = project_root / "src/lambda_functions/investment_metrics"
+        trade_history_path = project_root / "src/lambda_functions/trade_history"
         resolved_path = str(asset_path.resolve())
+        trade_history_resolved_path = str(trade_history_path.resolve())
         
         logger.info(f"   Asset path: {asset_path}")
         logger.info(f"   Resolved path: {resolved_path}")
         logger.info(f"   Path exists: {asset_path.exists()}")
+        logger.info(f"   Trade History path: {trade_history_path}")
+        logger.info(f"   Trade History resolved path: {trade_history_resolved_path}")
+        logger.info(f"   Trade History path exists: {trade_history_path.exists()}")
         
         if not asset_path.exists():
             logger.error(f"CRITICAL ERROR: Asset path validation FAILED")
             logger.error(f"   Expected path: {resolved_path}")
+            logger.error(f"   Current working directory: {os.getcwd()}")
+            logger.error(f"   Terminating deployment to prevent CDK errors.")
+            exit(1)
+            
+        if not trade_history_path.exists():
+            logger.error(f"CRITICAL ERROR: Trade History path validation FAILED")
+            logger.error(f"   Expected path: {trade_history_resolved_path}")
             logger.error(f"   Current working directory: {os.getcwd()}")
             logger.error(f"   Terminating deployment to prevent CDK errors.")
             exit(1)
@@ -87,6 +99,11 @@ class InvestmentMetricsStack(Stack):
         logger.info("Creating Investment Metrics Lambda function...")
         self.investment_metrics_lambda = self._create_investment_metrics_lambda()
         logger.info("Investment Metrics Lambda function created successfully!")
+        
+        # Create the Trade History Lambda function
+        logger.info("Creating Trade History Lambda function...")
+        self.trade_history_lambda = self._create_trade_history_lambda()
+        logger.info("Trade History Lambda function created successfully!")
         
         # Create CloudWatch Log Group
         logger.info("Creating CloudWatch Log Groups...")
@@ -158,12 +175,52 @@ class InvestmentMetricsStack(Stack):
             description="Investment analysis and metrics for AI chatbot - Testing deployment"
         )
 
+    def _create_trade_history_lambda(self) -> _lambda.Function:
+        """Create Trade History Lambda function"""
+        # Use the validated path - invariant resolution
+        project_root = SCRIPT_DIR.parent.parent  # Go up from cdk/investment-metrics to project root
+        asset_path = project_root / "src/lambda_functions/trade_history"
+        logger.info(f"   Using asset path: {asset_path}")
+        logger.info("   Configuring Lambda function with Python 3.12 runtime...")
+        
+        return _lambda.Function(
+            self, "TradeHistoryFunction",
+            runtime=_lambda.Runtime.PYTHON_3_12,
+            handler="lambda_function.lambda_handler",
+            code=_lambda.Code.from_asset(
+                str(asset_path),
+                bundling=cdk.BundlingOptions(
+                    image=_lambda.Runtime.PYTHON_3_12.bundling_image,
+                    command=[
+                        "bash", "-c",
+                        "pip install -r requirements.txt -t /asset-output && cp -r . /asset-output"
+                    ]
+                )
+            ),
+            role=self.lambda_execution_role,
+            timeout=Duration.seconds(30),
+            memory_size=512,
+            environment={
+                "LOG_LEVEL": "INFO"
+            },
+            # Removed function_name - let CDK auto-generate unique name
+            description="Trade history processing for AI chatbot - Testing deployment"
+        )
+
     def _create_log_groups(self):
         """Create CloudWatch Log Groups for the Lambda function"""
         logger.info(f"   Creating log group: /aws/lambda/{self.investment_metrics_lambda.function_name}")
         logs.LogGroup(
             self, "InvestmentMetricsLogGroup",
             log_group_name=f"/aws/lambda/{self.investment_metrics_lambda.function_name}",
+            retention=logs.RetentionDays.ONE_WEEK,
+            removal_policy=cdk.RemovalPolicy.DESTROY
+        )
+        
+        logger.info(f"   Creating log group: /aws/lambda/{self.trade_history_lambda.function_name}")
+        logs.LogGroup(
+            self, "TradeHistoryLogGroup",
+            log_group_name=f"/aws/lambda/{self.trade_history_lambda.function_name}",
             retention=logs.RetentionDays.ONE_WEEK,
             removal_policy=cdk.RemovalPolicy.DESTROY
         )
@@ -181,6 +238,18 @@ class InvestmentMetricsStack(Stack):
             self, "InvestmentMetricsLambdaName", 
             value=self.investment_metrics_lambda.function_name,
             description="Investment Metrics Lambda Function Name"
+        )
+        
+        CfnOutput(
+            self, "TradeHistoryLambdaArn",
+            value=self.trade_history_lambda.function_arn,
+            description="Trade History Lambda Function ARN"
+        )
+        
+        CfnOutput(
+            self, "TradeHistoryLambdaName", 
+            value=self.trade_history_lambda.function_name,
+            description="Trade History Lambda Function Name"
         )
 
 

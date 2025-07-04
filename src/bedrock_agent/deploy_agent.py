@@ -11,7 +11,7 @@ from typing import Dict, Any
 class BedrockAgentDeployer:
     """Deploy and configure Bedrock Agent for investment analysis"""
     
-    def __init__(self, region: str = "us-east-1"):
+    def __init__(self, region: str = "ap-southeast-1"):
         self.region = region
         self.bedrock_agent = boto3.client('bedrock-agent', region_name=region)
         self.lambda_client = boto3.client('lambda', region_name=region)
@@ -201,7 +201,7 @@ def main():
     
     parser = argparse.ArgumentParser(description="Deploy Bedrock Agent for Investment Analysis")
     parser.add_argument("--account-id", required=True, help="AWS Account ID")
-    parser.add_argument("--region", default="us-east-1", help="AWS Region")
+    parser.add_argument("--region", default="ap-southeast-1", help="AWS Region")
     parser.add_argument("--test", action="store_true", help="Test the agent after deployment")
     
     args = parser.parse_args()

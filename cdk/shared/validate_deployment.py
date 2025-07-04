@@ -82,7 +82,7 @@ class AWSCDKValidator:
                 details.append("Boto3 credentials available")
                 
                 # Get region
-                region = session.region_name or env_vars['AWS_REGION'] or 'us-east-1'
+                region = session.region_name or env_vars['AWS_REGION'] or 'ap-southeast-1'
                 print(f"✅ Region: {region}")
                 details.append(f"Region configured: {region}")
                 

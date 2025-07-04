@@ -45,6 +45,16 @@ class ChatbotInfrastructureStack(Stack):
         
         super().__init__(scope, construct_id, **kwargs)
 
+        # Get environment-specific naming prefix for multi-user safety
+        self.env_prefix = os.getenv('ENV_PREFIX', 'dev')
+        self.user_prefix = os.getenv('USER_PREFIX', 'default')
+        self.naming_prefix = f"{self.env_prefix}-{self.user_prefix}"
+        
+        logger.info(f"   Environment prefix: {self.env_prefix}")
+        logger.info(f"   User prefix: {self.user_prefix}")
+        logger.info(f"   Naming prefix: {self.naming_prefix}")
+
+
         # PATH VALIDATION GUARDRAIL - Terminate if any asset path is incorrect
         logger.info("Starting path validation...")
         required_paths = [
@@ -78,7 +88,7 @@ class ChatbotInfrastructureStack(Stack):
         # Configuration from environment
         logger.info("Loading environment configuration...")
         self.account_id = os.getenv('AWS_ACCOUNT_ID')
-        self._region = os.getenv('AWS_DEFAULT_REGION') or 'us-east-1'
+        self._region = os.getenv('AWS_DEFAULT_REGION') or 'ap-southeast-1'
         
         logger.info(f"   AWS Account ID: {self.account_id}")
         logger.info(f"   AWS Region: {self._region}")
@@ -137,7 +147,8 @@ class ChatbotInfrastructureStack(Stack):
                         )
                     ]
                 )
-            }
+            },
+            role_name=f"{self.naming_prefix}-lambda-execution-role"
         )
         logger.info(f"   Lambda execution role created: {role.role_name}")
         return role
@@ -164,7 +175,8 @@ class ChatbotInfrastructureStack(Stack):
                         )
                     ]
                 )
-            }
+            },
+            role_name=f"{self.naming_prefix}-bedrock-agent-role"
         )
         logger.info(f"   Bedrock agent role created: {role.role_name}")
         return role
@@ -187,7 +199,7 @@ class ChatbotInfrastructureStack(Stack):
             environment={
                 "LOG_LEVEL": "INFO"
             },
-            function_name="ChatbotInvestmentMetrics",
+            function_name=f"{self.naming_prefix}-investment-metrics",
             description="Investment analysis and metrics for AI chatbot"
         )
         logger.info(f"   Investment Metrics Lambda created: {function.function_name}")
@@ -211,7 +223,7 @@ class ChatbotInfrastructureStack(Stack):
             environment={
                 "LOG_LEVEL": "INFO"
             },
-            function_name="ChatbotFinancialData",
+            function_name=f"{self.naming_prefix}-financial-data",
             description="Financial data retrieval service for AI chatbot"
         )
         logger.info(f"   Financial Data Lambda created: {function.function_name}")
@@ -235,7 +247,7 @@ class ChatbotInfrastructureStack(Stack):
             environment={
                 "LOG_LEVEL": "INFO"
             },
-            function_name="ChatbotTicketCreation",
+            function_name=f"{self.naming_prefix}-ticket-creation",
             description="Internal ticketing system integration for AI chatbot"
         )
         logger.info(f"   Ticket Creation Lambda created: {function.function_name}")
@@ -259,7 +271,7 @@ class ChatbotInfrastructureStack(Stack):
             environment={
                 "LOG_LEVEL": "INFO"
             },
-            function_name="ChatbotTradeHistory",
+            function_name=f"{self.naming_prefix}-trade-history",
             description="Trade history retrieval service for AI chatbot"
         )
         logger.info(f"   Trade History Lambda created: {function.function_name}")
@@ -287,7 +299,7 @@ class ChatbotInfrastructureStack(Stack):
                 "TICKET_CREATION_FUNCTION": self.ticket_creation_lambda.function_name,
                 "TRADE_HISTORY_FUNCTION": self.trade_history_lambda.function_name
             },
-            function_name="ChatbotBedrockAdapter",
+            function_name=f"{self.naming_prefix}-bedrock-adapter",
             description="Bedrock Agent adapter with real LLM integration"
         )
         logger.info(f"   Bedrock Adapter Lambda created: {function.function_name}")
@@ -343,7 +355,7 @@ class FullChatbotApp(cdk.App):
         logger.info("Creating ChatbotInfrastructureStack...")
         # Create the main infrastructure stack
         ChatbotInfrastructureStack(
-            self, "ChatbotInfrastructureStack",
+            self, f"{os.getenv('ENV_PREFIX', 'dev')}-{os.getenv('USER_PREFIX', 'default')}-ChatbotInfrastructureStack",
             env=cdk.Environment(
                 account=os.getenv('AWS_ACCOUNT_ID'),
                 region=os.getenv('AWS_REGION')

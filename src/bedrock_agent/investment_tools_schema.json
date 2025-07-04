@@ -103,6 +103,69 @@
           }
         }
       }
+    },
+    "/get_trade_history": {
+      "post": {
+        "summary": "Get trade history for a user",
+        "description": "Retrieves trade history data for investment analysis and reporting",
+        "operationId": "get_trade_history",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query_type": {
+                    "type": "string",
+                    "description": "Type of trade history query",
+                    "enum": ["allTrades"],
+                    "default": "allTrades"
+                  },
+                  "time_frame": {
+                    "type": "string",
+                    "description": "Time frame for the trade history",
+                    "enum": ["this year", "last month", "last quarter", "last 6 months"],
+                    "default": "this year"
+                  },
+                  "user_id": {
+                    "type": "string",
+                    "description": "User identifier for trade history",
+                    "default": "mock_ic_user_1"
+                  }
+                },
+                "required": ["query_type"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Trade history retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "trades": {
+                      "type": "array",
+                      "description": "List of trade records"
+                    },
+                    "summary": {
+                      "type": "object",
+                      "description": "Summary statistics of trades"
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Success message"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 } 
